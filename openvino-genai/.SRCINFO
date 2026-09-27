@@ -1,0 +1,24 @@
+pkgbase = openvino-genai
+	pkgdesc = OpenVINO GenAI C/C++ runtime (LLM, ASR, VLM pipelines) with OpenVINO Tokenizers
+	pkgver = 2026.4.0.0
+	pkgrel = 1
+	url = https://github.com/openvinotoolkit/openvino.genai
+	arch = x86_64
+	license = Apache-2.0
+	makedepends = cmake
+	makedepends = git
+	makedepends = ninja
+	depends = gcc-libs
+	depends = glibc
+	depends = icu
+	depends = openvino>=2026.4.0
+	optdepends = openvino-intel-npu-plugin: run pipelines on the Intel NPU
+	optdepends = openvino-intel-gpu-plugin: run pipelines on Intel GPUs
+	provides = openvino-tokenizers=2026.4.0.0
+	conflicts = openvino-tokenizers
+	source = openvino.genai-2026.4.0.0.tar.gz::https://github.com/openvinotoolkit/openvino.genai/archive/refs/tags/2026.4.0.0.tar.gz
+	source = openvino_tokenizers-2026.4.0.0.tar.gz::https://github.com/openvinotoolkit/openvino_tokenizers/archive/refs/tags/2026.4.0.0.tar.gz
+	sha256sums = bd67d6f7baa0acf84ff4a0975f262921f1b007593a34117a6e8fcce7ce5ebef8
+	sha256sums = 2eb148fe78fe34afa8c598b5e40b31013dc9202920b56df5f129f147c2cf7483
+
+pkgname = openvino-genai
