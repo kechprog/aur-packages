@@ -1,0 +1,104 @@
+name: AUR
+
+# Daily: run each package's update.sh; a package it bumps is rebuilt and published.
+# Push to master: every package whose directory changed is rebuilt and published.
+# A package only reaches the AUR after it builds cleanly in a fresh Arch container.
+on:
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths: ['*/PKGBUILD', '*/update.sh']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: aur
+  cancel-in-progress: false
+
+jobs:
+  aur:
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    steps:
+      - name: Prepare Arch
+        run: |
+          pacman -Syu --noconfirm --needed git jq openssh pacman-contrib namcap
+          useradd -m builder
+          echo 'builder ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/builder
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Find packages to publish
+        id: pkgs
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          pkgs=()
+          if [[ $GITHUB_EVENT_NAME == push ]]; then
+            mapfile -t pkgs < <(git diff --name-only HEAD~1 HEAD -- '*/PKGBUILD' '*/update.sh' | cut -d/ -f1 | sort -u)
+          else
+            for update in */update.sh; do
+              pkg=${update%/update.sh}
+              msg=$("$update")
+              [[ -n $msg ]] && { echo "$msg"; pkgs+=("$pkg"); }
+            done
+          fi
+          echo "list=${pkgs[*]}" >> "$GITHUB_OUTPUT"
+
+      - name: Build, lint and generate .SRCINFO
+        if: steps.pkgs.outputs.list != ''
+        run: |
+          chown -R builder "$GITHUB_WORKSPACE"
+          for pkg in ${{ steps.pkgs.outputs.list }}; do
+            echo "::group::$pkg"
+            cd "$GITHUB_WORKSPACE/$pkg"
+            sudo -u builder updpkgsums
+            sudo -u builder makepkg --syncdeps --noconfirm --cleanbuild
+            namcap PKGBUILD *.pkg.tar.zst || true
+            sudo -u builder makepkg --printsrcinfo > .SRCINFO
+            echo "::endgroup::"
+          done
+
+      - name: Commit bumps and tag releases
+        if: steps.pkgs.outputs.list != ''
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          for pkg in ${{ steps.pkgs.outputs.list }}; do
+            ver=$(sed -n 's/^\s*pkgver = //p;s/^\s*pkgrel = /-/p' "$pkg/.SRCINFO" | tr -d '\n')
+            git add "$pkg/PKGBUILD" "$pkg/.SRCINFO"
+            git diff --cached --quiet || git commit -m "$pkg: update to $ver"
+            git tag -f "$pkg/$ver"
+          done
+          git push origin HEAD:master
+          git push -f origin --tags
+
+      - name: Publish to the AUR
+        if: steps.pkgs.outputs.list != ''
+        env:
+          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+        run: |
+          if [[ -z $AUR_SSH_PRIVATE_KEY ]]; then
+            echo "::notice::AUR_SSH_PRIVATE_KEY is not set; built and tagged, but not published to the AUR"
+            exit 0
+          fi
+          install -dm700 ~/.ssh
+          printf '%s\n' "$AUR_SSH_PRIVATE_KEY" > ~/.ssh/aur
+          chmod 600 ~/.ssh/aur
+          ssh-keyscan -t ed25519 aur.archlinux.org >> ~/.ssh/known_hosts
+          export GIT_SSH_COMMAND='ssh -i ~/.ssh/aur'
+          for pkg in ${{ steps.pkgs.outputs.list }}; do
+            ver=$(sed -n 's/^\s*pkgver = //p;s/^\s*pkgrel = /-/p' "$pkg/.SRCINFO" | tr -d '\n')
+            rm -rf "/tmp/aur-$pkg"
+            git clone "ssh://aur@aur.archlinux.org/$pkg.git" "/tmp/aur-$pkg"
+            # update.sh is automation for this repo, not part of the AUR package
+            cp "$pkg/PKGBUILD" "$pkg/.SRCINFO" "/tmp/aur-$pkg/"
+            cd "/tmp/aur-$pkg"
+            git add PKGBUILD .SRCINFO
+            git diff --cached --quiet || { git commit -m "Update to $ver"; git push origin HEAD:master; }
+            cd "$GITHUB_WORKSPACE"
+          done

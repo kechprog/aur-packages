@@ -1,0 +1,88 @@
+# Maintainer: Eduard Kechedzhiev <ed.kechedzhiev@gmail.com>
+
+# openvino.genai must be built against the exact OpenVINO release it targets
+# (its CMake refuses anything else), and upstream tags it as <openvino>.0.
+# Bumping means changing _ovver to the version of Arch's openvino package.
+_ovver=2026.3.1
+pkgname=openvino-genai
+pkgver=${_ovver}.0
+pkgrel=1
+pkgdesc="OpenVINO GenAI C/C++ runtime (LLM, ASR, VLM pipelines) with OpenVINO Tokenizers"
+arch=('x86_64')
+url='https://github.com/openvinotoolkit/openvino.genai'
+license=('Apache-2.0')
+depends=(
+  'gcc-libs'
+  'glibc'
+  'icu'
+  "openvino>=${_ovver}"
+)
+makedepends=(
+  'cmake'
+  'git'
+  'ninja'
+)
+optdepends=(
+  'openvino-intel-npu-plugin: run pipelines on the Intel NPU'
+  'openvino-intel-gpu-plugin: run pipelines on Intel GPUs'
+)
+provides=("openvino-tokenizers=${pkgver}")
+conflicts=('openvino-tokenizers')
+source=(
+  "openvino.genai-${pkgver}.tar.gz::https://github.com/openvinotoolkit/openvino.genai/archive/refs/tags/${pkgver}.tar.gz"
+  "openvino_tokenizers-${pkgver}.tar.gz::https://github.com/openvinotoolkit/openvino_tokenizers/archive/refs/tags/${pkgver}.tar.gz"
+)
+sha256sums=('9a38a4ba4a790dc528a54241f27ca76cba265fdcd2a23809057751e2960db962'
+            '15bfe4492406a7272d082ff5ac7305e324f95837c1c7b9c88a8b8019a433abd2')
+
+prepare() {
+  cd "openvino.genai-${pkgver}"
+
+  # The tokenizers git submodule is not part of GitHub's tag tarball.
+  rmdir thirdparty/openvino_tokenizers
+  ln -s "${srcdir}/openvino_tokenizers-${pkgver}" thirdparty/openvino_tokenizers
+
+  # Upstream hardcodes its archive layout (runtime/lib/intel64, runtime/include,
+  # runtime/cmake, docs/licensing). Map it onto the FHS. Fail loudly if upstream
+  # changes the layout so an automated bump never publishes a mislaid package.
+  grep -q 'runtime/lib/${ARCH_DIR}' src/CMakeLists.txt
+  local files
+  mapfile -t files < <(grep -rlE 'runtime/(lib|bin|include|cmake)|docs/licensing' \
+    CMakeLists.txt cmake src --include=CMakeLists.txt --include='*.cmake')
+  sed -i \
+    -e 's#runtime/lib/${ARCH_DIR}#lib#g' \
+    -e 's#runtime/bin/${ARCH_DIR}#bin#g' \
+    -e 's#runtime/include#include#g' \
+    -e 's#runtime/cmake#lib/cmake/OpenVINOGenAI#g' \
+    -e "s#docs/licensing#share/licenses/${pkgname}#g" \
+    "${files[@]}"
+}
+
+build() {
+  # Upstream fetches a handful of small header/static-lib dependencies
+  # (nlohmann-json, minja, safetensors.h, gguf-tools, sentencepiece, pcre2)
+  # via CMake FetchContent, each pinned to a commit or SHA256 upstream.
+  # Upstream only asks for "at least C++17", so GCC 16's C++20 default applies
+  # unless pinned, and the code is not C++20-clean (u8 literals are char8_t).
+  cmake -S "openvino.genai-${pkgver}" -B build -G Ninja \
+    -DCMAKE_BUILD_TYPE=None \
+    -DCMAKE_INSTALL_PREFIX=/usr \
+    -DOpenVINO_DIR=/usr/lib/cmake/openvino \
+    -DCMAKE_CXX_STANDARD=17 \
+    -DCMAKE_CXX_STANDARD_REQUIRED=ON \
+    -DENABLE_PYTHON=OFF \
+    -DENABLE_JS=OFF \
+    -DENABLE_SAMPLES=OFF \
+    -DENABLE_TESTS=OFF \
+    -DENABLE_TOOLS=OFF \
+    -DENABLE_XGRAMMAR=OFF \
+    -DENABLE_SYSTEM_ICU=ON \
+    -DOPENVINO_TOKENIZERS_INSTALL_LIBDIR=lib \
+    -DOPENVINO_TOKENIZERS_INSTALL_BINDIR=bin \
+    -Wno-dev
+  cmake --build build
+}
+
+package() {
+  DESTDIR="${pkgdir}" cmake --install build
+}
