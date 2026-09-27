@@ -3,7 +3,7 @@
 # openvino.genai must be built against the exact OpenVINO release it targets
 # (its CMake refuses anything else), and upstream tags it as <openvino>.0.
 # Bumping means changing _ovver to the version of Arch's openvino package.
-_ovver=2026.3.1
+_ovver=2026.4.0
 pkgname=openvino-genai
 pkgver=${_ovver}.0
 pkgrel=1
@@ -32,8 +32,8 @@ source=(
   "openvino.genai-${pkgver}.tar.gz::https://github.com/openvinotoolkit/openvino.genai/archive/refs/tags/${pkgver}.tar.gz"
   "openvino_tokenizers-${pkgver}.tar.gz::https://github.com/openvinotoolkit/openvino_tokenizers/archive/refs/tags/${pkgver}.tar.gz"
 )
-sha256sums=('9a38a4ba4a790dc528a54241f27ca76cba265fdcd2a23809057751e2960db962'
-            '15bfe4492406a7272d082ff5ac7305e324f95837c1c7b9c88a8b8019a433abd2')
+sha256sums=('bd67d6f7baa0acf84ff4a0975f262921f1b007593a34117a6e8fcce7ce5ebef8'
+            '2eb148fe78fe34afa8c598b5e40b31013dc9202920b56df5f129f147c2cf7483')
 
 prepare() {
   cd "openvino.genai-${pkgver}"
