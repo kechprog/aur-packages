@@ -12,14 +12,16 @@ arch=('x86_64')
 url='https://github.com/openvinotoolkit/openvino.genai'
 license=('Apache-2.0')
 depends=(
-  'gcc-libs'
   'glibc'
-  'icu'
+  'libgcc'
+  'libstdc++'
+  'onetbb'
   "openvino>=${_ovver}"
 )
 makedepends=(
   'cmake'
   'git'
+  'icu'
   'ninja'
 )
 optdepends=(
@@ -85,4 +87,13 @@ build() {
 
 package() {
   DESTDIR="${pkgdir}" cmake --install build
+
+  # Upstream installs sample sources even with ENABLE_SAMPLES=OFF, and puts the
+  # tokenizers docs under /usr/docs; keep only the tokenizers license files.
+  rm -r "${pkgdir}/usr/samples"
+  mv "${pkgdir}/usr/docs/openvino_tokenizers/LICENSE" \
+    "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE-TOKENIZERS"
+  mv "${pkgdir}/usr/docs/openvino_tokenizers/third-party-programs.txt" \
+    "${pkgdir}/usr/share/licenses/${pkgname}/third-party-programs-tokenizers.txt"
+  rm -r "${pkgdir}/usr/docs"
 }
