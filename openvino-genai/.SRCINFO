@@ -7,10 +7,12 @@ pkgbase = openvino-genai
 	license = Apache-2.0
 	makedepends = cmake
 	makedepends = git
+	makedepends = icu
 	makedepends = ninja
-	depends = gcc-libs
 	depends = glibc
-	depends = icu
+	depends = libgcc
+	depends = libstdc++
+	depends = onetbb
 	depends = openvino>=2026.4.0
 	optdepends = openvino-intel-npu-plugin: run pipelines on the Intel NPU
 	optdepends = openvino-intel-gpu-plugin: run pipelines on Intel GPUs
